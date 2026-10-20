@@ -1,5 +1,9 @@
-#ifndef SHANXUEXI_JSONHELPER_H
+﻿#ifndef SHANXUEXI_JSONHELPER_H
 #define SHANXUEXI_JSONHELPER_H
+
+#if defined(_MSC_VER)
+#pragma execution_character_set("utf-8")
+#endif
 
 #include <string>
 #include <vector>

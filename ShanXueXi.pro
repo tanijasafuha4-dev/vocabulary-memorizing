@@ -1,6 +1,7 @@
 QT += core gui qml quick quickcontrols2
 
-CONFIG += c++17
+CONFIG += c++17 utf8_source
+msvc: QMAKE_CXXFLAGS += /utf-8
 
 TARGET = ShanXueXi
 TEMPLATE = app

@@ -1,4 +1,4 @@
-#ifndef SHANXUEXI_QUIZENGINE_H
+﻿#ifndef SHANXUEXI_QUIZENGINE_H
 #define SHANXUEXI_QUIZENGINE_H
 
 #include "Models.h"

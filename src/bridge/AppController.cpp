@@ -1,4 +1,4 @@
-#include "AppController.h"
+﻿#include "AppController.h"
 #include <QStandardPaths>
 #include <QDir>
 #include <QGuiApplication>

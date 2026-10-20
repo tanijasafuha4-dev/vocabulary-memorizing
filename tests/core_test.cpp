@@ -1,6 +1,12 @@
-#include <iostream>
+﻿#include <iostream>
 #include <cassert>
 #include <stdexcept>
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 #include "core/Models.h"
 #include "core/JsonHelper.h"
 #include "core/StorageManager.h"
@@ -12,6 +18,10 @@
 using namespace shanxuexi;
 
 int main() {
+#if defined(_WIN32)
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     std::cout << "==========================================\n";
     std::cout << "  闪学习 v1.0 - C++ 核心引擎自动化单元测试\n";
     std::cout << "==========================================\n\n";

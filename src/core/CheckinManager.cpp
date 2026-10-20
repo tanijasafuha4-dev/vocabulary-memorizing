@@ -1,4 +1,4 @@
-#include "CheckinManager.h"
+﻿#include "CheckinManager.h"
 #include <ctime>
 #include <sstream>
 #include <iomanip>

@@ -1,4 +1,4 @@
-#include "EbbinghausEngine.h"
+﻿#include "EbbinghausEngine.h"
 #include <algorithm>
 #include <cmath>
 #include <cctype>
