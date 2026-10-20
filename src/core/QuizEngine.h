@@ -41,7 +41,12 @@ public:
 
     const Word* currentWord() const;
     const std::vector<Word>& quizList() const { return m_list; }
-    const std::vector<Word>& wrongWords() const { return m_wrong; }
+
+    /**
+     * @brief 获取需要强化重练的单词列表（包含本次标记为 "fuzzy" 或 "wrong" 的单词）
+     */
+    const std::vector<Word>& retryWords() const { return m_retryWords; }
+    const std::vector<Word>& wrongWords() const { return m_retryWords; }
 
     /**
      * @brief 记录当前题目的回答 ("know" | "fuzzy" | "wrong") 并推进到下一题
@@ -56,7 +61,7 @@ public:
 
 private:
     std::vector<Word> m_list;
-    std::vector<Word> m_wrong;
+    std::vector<Word> m_retryWords;
     int m_idx = 0;
     int m_ok = 0;
     int m_fz = 0;

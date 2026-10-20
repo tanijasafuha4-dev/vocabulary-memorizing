@@ -4,12 +4,13 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <unordered_map>
 #include <cstdint>
 #include <chrono>
+#include <ctime>
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <cctype>
 
 namespace shanxuexi {
 
@@ -22,14 +23,77 @@ inline int64_t currentTimestampMs() {
 }
 
 /**
- * @brief 生成唯一目录 ID (对齐原版 uid() 逻辑)
+ * @brief 全局共享的高质量随机数引擎 (结合 random_device 与高精度时钟初始化种子)
+ */
+inline std::mt19937_64& sharedRng() {
+    static std::mt19937_64 rng([]() {
+        std::random_device rd;
+        auto now = static_cast<uint64_t>(
+            std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        std::seed_seq seq{
+            rd(), rd(),
+            static_cast<unsigned int>(now & 0xFFFFFFFFULL),
+            static_cast<unsigned int>(now >> 32)
+        };
+        return std::mt19937_64(seq);
+    }());
+    return rng;
+}
+
+/**
+ * @brief 生成唯一目录 ID (对齐原版 uid() 逻辑，附带递增序列号防止同毫秒碰撞)
  */
 inline std::string generateUid() {
-    static std::mt19937_64 rng(static_cast<uint64_t>(currentTimestampMs()));
+    static uint32_t seq = 0;
     std::uniform_int_distribution<uint32_t> dist(1000, 999999);
     std::ostringstream oss;
-    oss << "d" << std::hex << currentTimestampMs() << dist(rng);
+    oss << "d" << std::hex << currentTimestampMs() << "_" << (++seq) << "_" << dist(sharedRng());
     return oss.str();
+}
+
+/**
+ * @brief ASCII 字符串转小写辅助函数
+ */
+inline std::string toLowerAscii(std::string s) {
+    for (char& c : s) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return s;
+}
+
+/**
+ * @brief ASCII 大小写不敏感字符串相等比较（用于单词匹配）
+ */
+inline bool equalsIgnoreCaseAscii(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+            std::tolower(static_cast<unsigned char>(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * @brief 跨平台线程安全地将 time_t 转换为本地时间 std::tm
+ */
+inline void getLocalTm(std::time_t t, std::tm& outTm) {
+#if defined(_WIN32)
+    localtime_s(&outTm, &t);
+#else
+    localtime_r(&t, &outTm);
+#endif
+}
+
+/**
+ * @brief 获取当前本地时间的小时数 (0 ~ 23)
+ */
+inline int currentLocalHour() {
+    std::time_t now = std::time(nullptr);
+    std::tm tmBuf{};
+    getLocalTm(now, tmBuf);
+    return tmBuf.tm_hour;
 }
 
 /**

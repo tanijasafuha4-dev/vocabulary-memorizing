@@ -3,18 +3,14 @@
 #include <QDir>
 #include <QGuiApplication>
 #include <QClipboard>
-#include <QDateTime>
 #include <algorithm>
-#include <cctype>
 
 namespace shanxuexi {
 
-static std::string toLowerStr(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    return out;
+static bool matchesSearchQuery(const Word& w, const std::string& lowerQuery) {
+    if (lowerQuery.empty()) return true;
+    return toLowerAscii(w.en).find(lowerQuery) != std::string::npos ||
+           toLowerAscii(w.cn).find(lowerQuery) != std::string::npos;
 }
 
 AppController::AppController(QObject* parent)
@@ -26,6 +22,10 @@ AppController::AppController(QObject* parent)
         m_storage.setStorageFilePath(filePath.toStdString());
     }
     m_state = m_storage.loadState();
+}
+
+AppController::~AppController() {
+    m_storage.saveState(m_state);
 }
 
 QString AppController::currentTheme() const {
@@ -75,8 +75,11 @@ bool AppController::checkedInToday() const {
 
 int AppController::unlockedBadgeCount() const {
     int cnt = 0;
-    for (const auto& kv : m_state.badges) {
-        if (kv.second > 0) cnt++;
+    for (const auto& def : AchievementEngine::allDefinitions()) {
+        auto it = m_state.badges.find(def.id);
+        if (it != m_state.badges.end() && it->second > 0) {
+            cnt++;
+        }
     }
     return cnt;
 }
@@ -86,33 +89,27 @@ int AppController::totalBadgeCount() const {
 }
 
 std::vector<Word> AppController::collectAllWords() const {
-    std::vector<Word> out;
-    for (const auto& d : m_state.decks) {
-        for (const auto& w : d.words) {
-            Word copy = w;
-            copy.deckId = d.id;
-            copy.deckName = d.name;
-            out.push_back(std::move(copy));
-        }
-    }
-    return out;
+    return collectRangeWords("__all__");
 }
 
 std::vector<Word> AppController::collectRangeWords(const std::string& rangeId) const {
-    if (rangeId.empty() || rangeId == "__all__") {
-        return collectAllWords();
-    }
+    bool isAll = (rangeId.empty() || rangeId == "__all__");
     std::vector<Word> out;
+    if (isAll) {
+        out.reserve(static_cast<size_t>(totalWordCount()));
+    }
+
     for (const auto& d : m_state.decks) {
-        if (d.id == rangeId) {
-            for (const auto& w : d.words) {
-                Word copy = w;
-                copy.deckId = d.id;
-                copy.deckName = d.name;
-                out.push_back(std::move(copy));
-            }
-            break;
+        if (!isAll && d.id != rangeId) continue;
+        if (!isAll) {
+            out.reserve(d.words.size());
         }
+        for (const auto& w : d.words) {
+            out.push_back(w);
+            if (out.back().deckId.empty()) out.back().deckId = d.id;
+            if (out.back().deckName.empty()) out.back().deckName = d.name;
+        }
+        if (!isAll) break;
     }
     return out;
 }
@@ -152,12 +149,11 @@ QVariantList AppController::wordsModel() const {
     std::string deckId = m_currentDeckId.toStdString();
     std::vector<Word> raw = collectRangeWords(deckId);
 
-    std::string q = toLowerStr(m_deckSearchQuery.trimmed().toStdString());
+    std::string q = toLowerAscii(m_deckSearchQuery.trimmed().toStdString());
     if (!q.empty()) {
         std::vector<Word> searched;
         for (const auto& w : raw) {
-            if (toLowerStr(w.en).find(q) != std::string::npos ||
-                toLowerStr(w.cn).find(q) != std::string::npos) {
+            if (matchesSearchQuery(w, q)) {
                 searched.push_back(w);
             }
         }
@@ -233,13 +229,12 @@ QVariantMap AppController::quizResult() const {
     m["wrong"] = m_quiz.wrongCount();
 
     QVariantList wrongList;
-    for (const auto& w : m_quiz.wrongWords()) {
-        // 查找最新状态
+    for (const auto& w : m_quiz.retryWords()) {
         Word latest = w;
         for (const auto& d : m_state.decks) {
             if (d.id == w.deckId) {
                 for (const auto& dw : d.words) {
-                    if (dw.en == w.en) {
+                    if (equalsIgnoreCaseAscii(dw.en, w.en)) {
                         latest = dw;
                         latest.deckId = d.id;
                         latest.deckName = d.name;
@@ -312,13 +307,12 @@ void AppController::setDeckSearchQuery(const QString& query) {
 }
 
 QVariantList AppController::searchAllWords(const QString& query) const {
-    std::string q = toLowerStr(query.trimmed().toStdString());
+    std::string q = toLowerAscii(query.trimmed().toStdString());
     if (q.empty()) return {};
 
     QVariantList out;
     for (const auto& w : collectAllWords()) {
-        if (toLowerStr(w.en).find(q) != std::string::npos ||
-            toLowerStr(w.cn).find(q) != std::string::npos) {
+        if (matchesSearchQuery(w, q)) {
             out.append(wordToVariantMap(w));
         }
     }
@@ -356,6 +350,15 @@ bool AppController::renameDeck(const QString& deckId, const QString& newName) {
     }
     std::string id = deckId.toStdString();
     std::string stdName = trimmed.toStdString();
+
+    // 检查是否与其他已有目录重名
+    for (const auto& d : m_state.decks) {
+        if (d.id != id && d.name == stdName) {
+            emit toastMessage(QStringLiteral("已存在同名目录"));
+            return false;
+        }
+    }
+
     for (auto& d : m_state.decks) {
         if (d.id == id) {
             d.name = stdName;
@@ -416,17 +419,17 @@ bool AppController::addWord(const QString& deckId, const QString& en,
         targetDeckId = m_state.decks.front().id;
     }
 
+    std::string stdEn = trimEn.toStdString();
     for (auto& d : m_state.decks) {
         if (d.id == targetDeckId) {
-            std::string lowerEn = toLowerStr(trimEn.toStdString());
             for (const auto& existing : d.words) {
-                if (toLowerStr(existing.en) == lowerEn) {
+                if (equalsIgnoreCaseAscii(existing.en, stdEn)) {
                     emit toastMessage(QStringLiteral("该目录中已存在「%1」").arg(trimEn));
                     return false;
                 }
             }
             Word w;
-            w.en = trimEn.toStdString();
+            w.en = stdEn;
             w.cn = trimCn.toStdString();
             w.pos = pos.trimmed().toStdString();
             w.ex = ex.trimmed().toStdString();
@@ -450,7 +453,7 @@ bool AppController::deleteWord(const QString& deckId, const QString& en) {
     for (auto& d : m_state.decks) {
         if (d.id == did) {
             auto it = std::find_if(d.words.begin(), d.words.end(),
-                                   [&stdEn](const Word& w) { return w.en == stdEn; });
+                                   [&stdEn](const Word& w) { return equalsIgnoreCaseAscii(w.en, stdEn); });
             if (it != d.words.end()) {
                 d.words.erase(it);
                 saveAndCheckAchievements();
@@ -463,7 +466,16 @@ bool AppController::deleteWord(const QString& deckId, const QString& en) {
 }
 
 int AppController::getRangeWordCount(const QString& rangeId) const {
-    return static_cast<int>(collectRangeWords(rangeId.toStdString()).size());
+    std::string rid = rangeId.toStdString();
+    if (rid.empty() || rid == "__all__") {
+        return totalWordCount();
+    }
+    for (const auto& d : m_state.decks) {
+        if (d.id == rid) {
+            return static_cast<int>(d.words.size());
+        }
+    }
+    return 0;
 }
 
 bool AppController::startNormalQuiz(const QString& rangeId, int count) {
@@ -499,11 +511,11 @@ void AppController::answerQuiz(const QString& type) {
     std::string stdType = type.toStdString();
     Word answered = m_quiz.submitAnswer(stdType);
 
-    // 同步更新持久化词库中的对应单词统计
+    // 同步更新内存词库中的对应单词统计
     for (auto& d : m_state.decks) {
         if (d.id == answered.deckId) {
             for (auto& w : d.words) {
-                if (w.en == answered.en) {
+                if (equalsIgnoreCaseAscii(w.en, answered.en)) {
                     EbbinghausEngine::bumpStat(w, stdType);
                     break;
                 }
@@ -515,10 +527,8 @@ void AppController::answerQuiz(const QString& type) {
     if (m_quiz.isFinished()) {
         finishQuizSession();
     } else {
-        m_storage.saveState(m_state);
+        // 答题进行中仅通知测验卡片更新，避免逐题全量写盘与整表 UI 模型重算
         emit quizChanged();
-        emit stateChanged();
-        emit wordsChanged();
     }
 }
 
@@ -537,7 +547,7 @@ void AppController::finishQuizSession() {
         m_state.stats.lastAllKnow = false;
     }
 
-    int hour = QTime::currentTime().hour();
+    int hour = currentLocalHour();
     if (hour >= 6 && hour < 9) {
         m_state.stats.morningQuiz++;
     } else if (hour >= 23 || hour < 2) {
@@ -557,7 +567,13 @@ bool AppController::retryWrongQuiz() {
 }
 
 void AppController::abortQuiz() {
+    bool hadProgress = (m_quiz.currentIndex() > 0 && !m_quiz.isFinished());
     m_quiz.start({});
+    if (hadProgress) {
+        m_storage.saveState(m_state);
+        emit stateChanged();
+        emit wordsChanged();
+    }
     emit quizChanged();
 }
 

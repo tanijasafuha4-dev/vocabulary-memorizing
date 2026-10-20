@@ -234,7 +234,15 @@ std::vector<std::string> AchievementEngine::checkAndUnlock(AppState& state, cons
 
 bool AchievementEngine::toggleAllBadgesEasterEgg(AppState& state) {
     const auto& defs = allDefinitions();
-    if (state.badges.size() >= defs.size()) {
+    size_t validUnlockedCount = 0;
+    for (const auto& d : defs) {
+        auto it = state.badges.find(d.id);
+        if (it != state.badges.end() && it->second > 0) {
+            validUnlockedCount++;
+        }
+    }
+
+    if (validUnlockedCount >= defs.size()) {
         state.badges.clear();
         return false;
     } else {

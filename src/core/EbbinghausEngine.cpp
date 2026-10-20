@@ -118,14 +118,6 @@ void EbbinghausEngine::bumpStat(Word& word, const std::string& type, int64_t now
     s.lastType = type;
 }
 
-static std::string toLowerAscii(const std::string& s) {
-    std::string out = s;
-    for (char& c : out) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    return out;
-}
-
 std::vector<Word> EbbinghausEngine::applySortFilter(const std::vector<Word>& list,
                                                     const std::string& sortMode,
                                                     const std::string& filterMode) {

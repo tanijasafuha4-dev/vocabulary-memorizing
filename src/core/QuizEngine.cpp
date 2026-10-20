@@ -5,14 +5,9 @@
 
 namespace shanxuexi {
 
-static std::mt19937_64& globalRng() {
-    static std::mt19937_64 rng(static_cast<uint64_t>(currentTimestampMs()));
-    return rng;
-}
-
 std::vector<Word> QuizEngine::shuffleWords(std::vector<Word> list) {
     if (list.size() <= 1) return list;
-    std::shuffle(list.begin(), list.end(), globalRng());
+    std::shuffle(list.begin(), list.end(), sharedRng());
     return list;
 }
 
@@ -34,7 +29,7 @@ std::vector<Word> QuizEngine::weightedSample(const std::vector<Word>& pool, int 
     for (const auto& w : pool) {
         const WordStats& s = w.stats;
         double weight = 1.0 + s.wrong * 5.0 + s.fuzzy * 2.0 + (s.know == 0 ? 0.5 : 0.0);
-        double r = dist(globalRng());
+        double r = dist(sharedRng());
         double key = std::pow(r, 1.0 / weight);
         items.push_back({w, key});
     }
@@ -53,7 +48,7 @@ std::vector<Word> QuizEngine::weightedSample(const std::vector<Word>& pool, int 
 
 void QuizEngine::start(const std::vector<Word>& words) {
     m_list = words;
-    m_wrong.clear();
+    m_retryWords.clear();
     m_idx = 0;
     m_ok = 0;
     m_fz = 0;
@@ -69,13 +64,14 @@ bool QuizEngine::isFinished() const {
 }
 
 int QuizEngine::wrongCount() const {
-    int total = static_cast<int>(m_list.size());
-    return std::max(0, total - m_ok - m_fz);
+    int answered = std::min(m_idx, static_cast<int>(m_list.size()));
+    return std::max(0, answered - m_ok - m_fz);
 }
 
 int QuizEngine::accuracyRate() const {
-    if (m_list.empty()) return 0;
-    return static_cast<int>(std::round(static_cast<double>(m_ok) / m_list.size() * 100.0));
+    int answered = std::min(m_idx, static_cast<int>(m_list.size()));
+    if (answered <= 0) return 0;
+    return static_cast<int>(std::round(static_cast<double>(m_ok) / answered * 100.0));
 }
 
 const Word* QuizEngine::currentWord() const {
@@ -94,17 +90,17 @@ Word QuizEngine::submitAnswer(const std::string& type) {
         m_ok++;
     } else if (type == "fuzzy") {
         m_fz++;
-        m_wrong.push_back(answered);
+        m_retryWords.push_back(answered);
     } else {
-        m_wrong.push_back(answered);
+        m_retryWords.push_back(answered);
     }
     m_idx++;
     return answered;
 }
 
 bool QuizEngine::startRetryWrong() {
-    if (m_wrong.empty()) return false;
-    std::vector<Word> retryPool = shuffleWords(m_wrong);
+    if (m_retryWords.empty()) return false;
+    std::vector<Word> retryPool = shuffleWords(m_retryWords);
     start(retryPool);
     return true;
 }

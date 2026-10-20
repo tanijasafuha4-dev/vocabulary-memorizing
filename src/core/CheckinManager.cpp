@@ -7,14 +7,6 @@
 
 namespace shanxuexi {
 
-static void getLocalTm(std::time_t t, std::tm& outTm) {
-#if defined(_WIN32)
-    localtime_s(&outTm, &t);
-#else
-    localtime_r(&t, &outTm);
-#endif
-}
-
 static std::string formatYmd(int year, int month, int day) {
     std::ostringstream oss;
     oss << std::setw(4) << std::setfill('0') << year << "-"
@@ -157,6 +149,14 @@ int CheckinManager::calcMaxStreak(const std::map<std::string, bool>& checkins) {
     return maxS;
 }
 
+int CheckinManager::countTotalCheckins(const std::map<std::string, bool>& checkins) {
+    int count = 0;
+    for (const auto& kv : checkins) {
+        if (kv.second) count++;
+    }
+    return count;
+}
+
 CalendarMonthView CheckinManager::buildCalendarMonth(int year, int month,
                                                      const std::map<std::string, bool>& checkins) {
     CalendarMonthView view;
@@ -211,11 +211,7 @@ CalendarMonthView CheckinManager::buildCalendarMonth(int year, int month,
 
     view.streak = calcStreak(checkins);
     view.monthCount = monthCount;
-    int totalCnt = 0;
-    for (const auto& kv : checkins) {
-        if (kv.second) totalCnt++;
-    }
-    view.totalCount = totalCnt;
+    view.totalCount = countTotalCheckins(checkins);
     return view;
 }
 
@@ -243,12 +239,7 @@ ComputedStats CheckinManager::computeStats(const AppState& state) {
 
     cs.streak = calcStreak(state.checkins);
     cs.maxStreak = std::max(calcMaxStreak(state.checkins), cs.streak);
-
-    int checkinCount = 0;
-    for (const auto& kv : state.checkins) {
-        if (kv.second) checkinCount++;
-    }
-    cs.totalCheckins = checkinCount;
+    cs.totalCheckins = countTotalCheckins(state.checkins);
 
     int64_t nowMs = currentTimestampMs();
     int64_t firstMs = state.stats.firstUseDate > 0 ? state.stats.firstUseDate : nowMs;

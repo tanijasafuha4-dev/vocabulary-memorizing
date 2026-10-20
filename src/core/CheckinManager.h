@@ -69,6 +69,11 @@ public:
     static int calcMaxStreak(const std::map<std::string, bool>& checkins);
 
     /**
+     * @brief 统计累计打卡总天数
+     */
+    static int countTotalCheckins(const std::map<std::string, bool>& checkins);
+
+    /**
      * @brief 生成指定年月的打卡日历网格视图数据（周一开始，周日结束）
      * @param year  年份，如 2026
      * @param month 月份 1 ~ 12

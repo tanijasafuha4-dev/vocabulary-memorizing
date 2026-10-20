@@ -50,6 +50,7 @@ class AppController : public QObject {
 
 public:
     explicit AppController(QObject* parent = nullptr);
+    ~AppController() override;
 
     // 属性 Getter
     QString currentTheme() const;

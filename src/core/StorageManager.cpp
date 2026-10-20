@@ -1,8 +1,10 @@
 #include "StorageManager.h"
 #include <fstream>
+#include <filesystem>
 #include <ctime>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 namespace shanxuexi {
 
@@ -34,11 +36,7 @@ std::vector<Deck> StorageManager::createDefaultDecks() {
 static std::string currentDateTimeString() {
     std::time_t t = std::time(nullptr);
     std::tm tmBuf{};
-#if defined(_WIN32)
-    localtime_s(&tmBuf, &t);
-#else
-    localtime_r(&t, &tmBuf);
-#endif
+    getLocalTm(t, tmBuf);
     std::ostringstream oss;
     oss << (tmBuf.tm_year + 1900) << "/"
         << (tmBuf.tm_mon + 1) << "/"
@@ -147,6 +145,12 @@ AppState StorageManager::importBackupJson(const std::string& jsonStr) {
                 w.en = wVal.get("en").asString();
                 w.cn = wVal.get("cn").asString();
                 if (w.en.empty() && w.cn.empty()) continue;
+
+                // 同一目录下按大小写不敏感去重保护
+                bool duplicate = std::any_of(d.words.begin(), d.words.end(),
+                    [&w](const Word& existing) { return equalsIgnoreCaseAscii(existing.en, w.en); });
+                if (duplicate) continue;
+
                 w.pos = wVal.get("pos").asString();
                 w.ex = wVal.get("ex").asString();
                 w.deckId = d.id;
@@ -191,7 +195,10 @@ AppState StorageManager::importBackupJson(const std::string& jsonStr) {
     const JsonValue& badgesVal = root.get("badges");
     if (badgesVal.isObject()) {
         for (const auto& kv : badgesVal.asObject()) {
-            state.badges[kv.first] = kv.second.asInt64(currentTimestampMs());
+            int64_t ts = kv.second.asInt64(0);
+            if (ts > 0) {
+                state.badges[kv.first] = ts;
+            }
         }
     }
 
@@ -211,7 +218,8 @@ AppState StorageManager::importBackupJson(const std::string& jsonStr) {
 }
 
 AppState StorageManager::loadState() {
-    std::ifstream ifs(m_filePath, std::ios::in | std::ios::binary);
+    std::filesystem::path fsPath = std::filesystem::u8path(m_filePath);
+    std::ifstream ifs(fsPath, std::ios::in | std::ios::binary);
     if (ifs.is_open()) {
         std::ostringstream ss;
         ss << ifs.rdbuf();
@@ -234,7 +242,8 @@ AppState StorageManager::loadState() {
 }
 
 bool StorageManager::saveState(const AppState& state) {
-    std::ofstream ofs(m_filePath, std::ios::out | std::ios::binary | std::ios::trunc);
+    std::filesystem::path fsPath = std::filesystem::u8path(m_filePath);
+    std::ofstream ofs(fsPath, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!ofs.is_open()) return false;
     std::string json = exportBackupJson(state, true);
     ofs.write(json.data(), static_cast<std::streamsize>(json.size()));
