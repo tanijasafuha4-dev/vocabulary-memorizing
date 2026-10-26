@@ -7,7 +7,7 @@
 ## 一、项目目录结构
 
 ```text
-ShanXueXi_Qt/
+.
 ├── CMakeLists.txt                  # CMake 构建配置（支持 Qt5 / Qt6 及纯 C++ 单元测试）
 ├── ShanXueXi.pro                   # QMake 构建配置（兼容传统 Qt Creator 工程）
 ├── resources.qrc                   # Qt 资源文件清单
@@ -38,7 +38,7 @@ ShanXueXi_Qt/
 
 ### 方式 1：使用 Qt Creator 编译桌面端与 Android 移动端（推荐）
 
-1. 打开 **Qt Creator**，点击 `文件 -> 打开文件或项目`，选择 `ShanXueXi_Qt/CMakeLists.txt`（或 `ShanXueXi.pro`）。
+1. 打开 **Qt Creator**，点击 `文件 -> 打开文件或项目`，选择根目录下的 `CMakeLists.txt`（或 `ShanXueXi.pro`）。
 2. **桌面端运行（用于日常调试与课堂电脑演示）**：
    * 勾选 **Desktop Qt (MinGW / MSVC)** 构建套件（Kit）。
    * 点击左下角绿色运行按钮即可直接在电脑上启动移动端比例窗口。
